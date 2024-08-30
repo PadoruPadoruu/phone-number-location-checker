@@ -1,13 +1,13 @@
 import phonenumbers
 from phonenumbers import geocoder
 
+
 def normalize_phone_number(phone_number):
     # Remove any non-digit characters from the phone number
     normalized_number = ''.join(filter(str.isdigit, phone_number))
     
-    # Add the country code if missing (assuming US numbers)
-    if len(normalized_number) == 10:
-        normalized_number = '+1' + normalized_number
+    if len(normalized_number) == 8:
+        normalized_number = '+852' + normalized_number
     
     return normalized_number
 
