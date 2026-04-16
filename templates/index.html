@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Phone Number Location &amp; Risk Checker</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+
+    body {
+      font-family: system-ui, sans-serif;
+      background: #0f172a;
+      color: #e2e8f0;
+      margin: 0;
+      padding: 1.5rem;
+    }
+
+    h1 { font-size: 1.5rem; margin-bottom: 0.25rem; }
+    p.subtitle { color: #94a3b8; margin: 0 0 1.5rem; font-size: 0.9rem; }
+
+    .card {
+      background: #1e293b;
+      border-radius: 0.75rem;
+      padding: 1.25rem 1.5rem;
+      margin-bottom: 1.25rem;
+    }
+
+    .card h2 { font-size: 1rem; margin: 0 0 0.75rem; color: #7dd3fc; }
+
+    label { display: block; margin-bottom: 0.35rem; font-size: 0.85rem; color: #94a3b8; }
+
+    input[type="text"] {
+      width: 100%;
+      padding: 0.55rem 0.75rem;
+      border-radius: 0.4rem;
+      border: 1px solid #334155;
+      background: #0f172a;
+      color: #e2e8f0;
+      font-size: 0.95rem;
+      outline: none;
+    }
+    input[type="text"]:focus { border-color: #38bdf8; }
+
+    .btn-row { display: flex; gap: 0.6rem; flex-wrap: wrap; margin-top: 0.75rem; }
+
+    button {
+      padding: 0.5rem 1rem;
+      border-radius: 0.4rem;
+      border: none;
+      cursor: pointer;
+      font-size: 0.9rem;
+      font-weight: 600;
+      transition: opacity .15s;
+    }
+    button:disabled { opacity: 0.45; cursor: not-allowed; }
+
+    .btn-primary   { background: #0284c7; color: #fff; }
+    .btn-secondary { background: #334155; color: #e2e8f0; }
+    .btn-accent    { background: #7c3aed; color: #fff; }
+    button:not(:disabled):hover { opacity: 0.85; }
+
+    .status {
+      font-size: 0.82rem;
+      color: #94a3b8;
+      margin-top: 0.4rem;
+      min-height: 1.1em;
+    }
+
+    /* Risk badges */
+    .risk-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+      gap: 0.6rem;
+      margin-top: 0.75rem;
+    }
+    .badge {
+      border-radius: 0.4rem;
+      padding: 0.5rem 0.75rem;
+      font-size: 0.82rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.15rem;
+    }
+    .badge .label { color: #94a3b8; }
+    .badge .value { font-weight: 700; font-size: 0.95rem; }
+    .badge.ok    { background: #14532d44; border: 1px solid #16a34a; }
+    .badge.warn  { background: #78350f44; border: 1px solid #d97706; }
+    .badge.bad   { background: #7f1d1d44; border: 1px solid #ef4444; }
+    .badge.neutral { background: #1e293b; border: 1px solid #334155; }
+
+    /* JSON output */
+    pre {
+      background: #0f172a;
+      border: 1px solid #334155;
+      border-radius: 0.5rem;
+      padding: 1rem;
+      font-size: 0.8rem;
+      overflow-x: auto;
+      white-space: pre-wrap;
+      word-break: break-all;
+      max-height: 420px;
+      overflow-y: auto;
+    }
+
+    .section-title {
+      font-size: 0.8rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: #475569;
+      margin: 1rem 0 0.4rem;
+    }
+
+    /* GPS coords display */
+    .coords {
+      font-family: monospace;
+      font-size: 0.85rem;
+      color: #38bdf8;
+    }
+
+    #gps-result, #cell-result { display: none; }
+  </style>
+</head>
+<body>
+
+<h1>📍 Phone Number Location &amp; Risk Checker</h1>
+<p class="subtitle">
+  Consent-based, multi-signal analysis: phone metadata · GPS · cell-tower · IP intelligence
+</p>
+
+<!-- ── Phone Analysis ────────────────────────────────────────────── -->
+<div class="card">
+  <h2>📞 Phone Number Analysis</h2>
+  <label for="phone">Phone number (E.164 format, e.g. <code>+14155552671</code>)</label>
+  <input id="phone" type="text" placeholder="+14155552671" autocomplete="off" />
+  <div class="btn-row">
+    <button class="btn-primary" onclick="analyzePhone()">Analyze</button>
+  </div>
+  <div id="phone-status" class="status"></div>
+
+  <div id="risk-section" style="display:none">
+    <div class="section-title">Risk Profile</div>
+    <div id="risk-grid" class="risk-grid"></div>
+  </div>
+
+  <div id="phone-details" style="display:none">
+    <div class="section-title">Full Report</div>
+    <pre id="phone-json"></pre>
+  </div>
+</div>
+
+<!-- ── GPS Location ───────────────────────────────────────────────── -->
+<div class="card">
+  <h2>🛰 Real-Time GPS Location</h2>
+  <p style="font-size:0.85rem;color:#94a3b8;margin:0 0 0.75rem">
+    Uses <code>navigator.geolocation</code> (browser GPS / assisted GPS).
+    You will be asked to grant location permission.
+  </p>
+  <div class="btn-row">
+    <button class="btn-accent" onclick="getGPS()">Get My Location</button>
+  </div>
+  <div id="gps-status" class="status"></div>
+  <div id="gps-result">
+    <div class="section-title">GPS Coordinates</div>
+    <div id="gps-coords" class="coords"></div>
+    <div class="section-title">Reverse Geocode</div>
+    <pre id="gps-json"></pre>
+  </div>
+</div>
+
+<!-- ── Cell-Tower Triangulation ─────────────────────────────────── -->
+<div class="card">
+  <h2>📡 Cell-Tower / Wi-Fi Triangulation</h2>
+  <p style="font-size:0.85rem;color:#94a3b8;margin:0 0 0.75rem">
+    Provide cell-tower scan data from your device (Android/iOS native app).
+    Enter JSON directly below (format: <code>{ "cellTowers": [...], "wifiAccessPoints": [...] }</code>).
+  </p>
+  <label for="cell-input">Scan data (JSON)</label>
+  <input id="cell-input" type="text"
+    placeholder='{"cellTowers":[{"mobileCountryCode":310,"mobileNetworkCode":260,"locationAreaCode":7033,"cellId":42981}]}'
+    autocomplete="off" />
+  <div class="btn-row">
+    <button class="btn-secondary" onclick="cellLocate()">Triangulate</button>
+  </div>
+  <div id="cell-status" class="status"></div>
+  <div id="cell-result">
+    <div class="section-title">Estimated Location</div>
+    <pre id="cell-json"></pre>
+  </div>
+</div>
+
+<!-- ── IP Intelligence ─────────────────────────────────────────── -->
+<div class="card">
+  <h2>🔍 IP / VPN / Proxy Check</h2>
+  <p style="font-size:0.85rem;color:#94a3b8;margin:0 0 0.75rem">
+    Checks your current IP address for VPN, proxy, or Tor usage.
+    Set <code>IPQS_API_KEY</code> on the server for full results.
+  </p>
+  <div class="btn-row">
+    <button class="btn-secondary" onclick="checkIP()">Check My IP</button>
+  </div>
+  <div id="ip-status" class="status"></div>
+  <div id="ip-result" style="display:none">
+    <div class="section-title">IP Intelligence</div>
+    <pre id="ip-json"></pre>
+  </div>
+</div>
+
+<script>
+/* ── Helpers ─────────────────────────────────────────────────────── */
+
+function setStatus(id, msg, color) {
+  const el = document.getElementById(id);
+  el.textContent = msg;
+  el.style.color = color || '#94a3b8';
+}
+
+async function post(url, body) {
+  const r = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  return r.json();
+}
+
+/* ── Risk badge helpers ─────────────────────────────────────────── */
+
+function badgeClass(value, goodWhenFalse = true) {
+  if (value === null || value === undefined) return 'neutral';
+  if (typeof value === 'boolean') return (value === !goodWhenFalse) ? 'bad' : 'ok';
+  return 'neutral';
+}
+
+function renderRisk(risk) {
+  const fields = [
+    { key: 'is_valid',         label: 'Valid number',    invert: false },
+    { key: 'is_voip',          label: 'VoIP',            invert: true  },
+    { key: 'is_virtual',       label: 'Virtual/MVNO',    invert: true  },
+    { key: 'is_toll_free',     label: 'Toll-free',       invert: null  },
+    { key: 'is_ported',        label: 'Ported',          invert: true  },
+    { key: 'is_roaming',       label: 'Roaming',         invert: null  },
+    { key: 'is_vpn',           label: 'VPN',             invert: true  },
+    { key: 'is_proxy',         label: 'Proxy',           invert: true  },
+    { key: 'is_tor',           label: 'Tor',             invert: true  },
+    { key: 'country_mismatch', label: 'Country mismatch',invert: true  },
+    { key: 'fraud_score',      label: 'Fraud score',     invert: null  },
+  ];
+  const grid = document.getElementById('risk-grid');
+  grid.innerHTML = '';
+  fields.forEach(({ key, label, invert }) => {
+    const val = risk[key];
+    let cls = 'neutral', display = val === null || val === undefined ? '—' : String(val);
+    if (typeof val === 'boolean') {
+      if (invert === null) cls = 'neutral';
+      else cls = val === invert ? 'bad' : 'ok';
+      display = val ? 'Yes' : 'No';
+    } else if (typeof val === 'number' && key === 'fraud_score') {
+      cls = val >= 75 ? 'bad' : val >= 40 ? 'warn' : 'ok';
+      display = String(val) + '/100';
+    }
+    grid.innerHTML += `
+      <div class="badge ${cls}">
+        <span class="label">${label}</span>
+        <span class="value">${display}</span>
+      </div>`;
+  });
+  document.getElementById('risk-section').style.display = 'block';
+}
+
+/* ── Phone Analysis ─────────────────────────────────────────────── */
+
+async function analyzePhone() {
+  const phone = document.getElementById('phone').value.trim();
+  if (!phone) { setStatus('phone-status', 'Please enter a phone number.', '#f87171'); return; }
+  setStatus('phone-status', 'Analyzing…');
+  document.getElementById('risk-section').style.display = 'none';
+  document.getElementById('phone-details').style.display = 'none';
+
+  try {
+    const data = await post('/api/analyze', { phone });
+    if (data.risk_summary) renderRisk(data.risk_summary);
+    document.getElementById('phone-json').textContent = JSON.stringify(data, null, 2);
+    document.getElementById('phone-details').style.display = 'block';
+    setStatus('phone-status', 'Analysis complete.', '#4ade80');
+  } catch (e) {
+    setStatus('phone-status', 'Request failed: ' + e.message, '#f87171');
+  }
+}
+
+/* ── GPS ────────────────────────────────────────────────────────── */
+
+async function getGPS() {
+  if (!navigator.geolocation) {
+    setStatus('gps-status', 'Geolocation is not supported by this browser.', '#f87171');
+    return;
+  }
+  setStatus('gps-status', 'Requesting location permission…');
+  navigator.geolocation.getCurrentPosition(
+    async (pos) => {
+      const { latitude: lat, longitude: lng, accuracy } = pos.coords;
+      document.getElementById('gps-coords').textContent =
+        `Lat: ${lat.toFixed(6)}  Lng: ${lng.toFixed(6)}  Accuracy: ±${Math.round(accuracy)}m`;
+      document.getElementById('gps-result').style.display = 'block';
+      setStatus('gps-status', 'Coordinates obtained. Reverse-geocoding…');
+      try {
+        const geo = await post('/api/locate', { lat, lng });
+        document.getElementById('gps-json').textContent = JSON.stringify(geo, null, 2);
+        setStatus('gps-status', 'Done.', '#4ade80');
+      } catch (e) {
+        setStatus('gps-status', 'Reverse-geocode failed: ' + e.message, '#f87171');
+      }
+    },
+    (err) => {
+      const msgs = {
+        1: 'Permission denied by user.',
+        2: 'Position unavailable (GPS signal lost?).',
+        3: 'Timed out waiting for GPS fix.',
+      };
+      setStatus('gps-status', msgs[err.code] || err.message, '#f87171');
+    },
+    { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+  );
+}
+
+/* ── Cell-Tower Triangulation ───────────────────────────────────── */
+
+async function cellLocate() {
+  const raw = document.getElementById('cell-input').value.trim();
+  if (!raw) { setStatus('cell-status', 'Please enter scan data JSON.', '#f87171'); return; }
+  let body;
+  try { body = JSON.parse(raw); } catch (e) {
+    setStatus('cell-status', 'Invalid JSON: ' + e.message, '#f87171'); return;
+  }
+  setStatus('cell-status', 'Triangulating…');
+  document.getElementById('cell-result').style.display = 'none';
+  try {
+    const data = await fetch('/api/cell-locate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }).then(r => r.json());
+    document.getElementById('cell-json').textContent = JSON.stringify(data, null, 2);
+    document.getElementById('cell-result').style.display = 'block';
+    setStatus('cell-status', data.error ? 'Error: ' + data.error : 'Done.', data.error ? '#f87171' : '#4ade80');
+  } catch (e) {
+    setStatus('cell-status', 'Request failed: ' + e.message, '#f87171');
+  }
+}
+
+/* ── IP Check ───────────────────────────────────────────────────── */
+
+async function checkIP() {
+  setStatus('ip-status', 'Checking IP…');
+  document.getElementById('ip-result').style.display = 'none';
+  try {
+    const data = await fetch('/api/ip-info').then(r => r.json());
+    document.getElementById('ip-json').textContent = JSON.stringify(data, null, 2);
+    document.getElementById('ip-result').style.display = 'block';
+    setStatus('ip-status', 'Done.', '#4ade80');
+  } catch (e) {
+    setStatus('ip-status', 'Request failed: ' + e.message, '#f87171');
+  }
+}
+
+/* ── Enter key shortcut for phone input ─────────────────────────── */
+document.getElementById('phone').addEventListener('keydown', e => {
+  if (e.key === 'Enter') analyzePhone();
+});
+</script>
+</body>
+</html>
