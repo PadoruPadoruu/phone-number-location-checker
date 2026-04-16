@@ -1,53 +1,123 @@
-# Phone Number Location Checker
+# Phone Number Location & Risk Checker
 
-This Python script utilizes the `phonenumbers` library to determine the geographic location associated with a given phone number. It's designed to be a simple tool for quickly finding out the region or country a phone number originates from. Ideal for researchers, developers, and anyone curious about phone number origins.
+A multi-signal location and risk-analysis tool for phone numbers.  
+It combines **phone metadata**, **real-time GPS**, **cell-tower triangulation**, and **IP intelligence** into a single unified risk profile.
+
+> ⚠️ **Legal notice** — Real-time device location requires **explicit user consent** (the OS enforces this). All lookups must comply with GDPR/CCPA and the ToS of each API provider. Never use this tool to track someone without their knowledge and consent.
+
+---
 
 ## Features
 
-- **Phone Number Normalization**: Automatically formats and normalizes input phone numbers to ensure accuracy.
-- **Geographic Location Identification**: Identifies the geographic location of a phone number using the `phonenumbers` library.
-- **Simple and Interactive**: Easy to use with an interactive command-line interface.
+| Signal | What it tells you |
+|---|---|
+| `phonenumbers` library | Region, carrier name, number type (Mobile/Fixed/VoIP/Toll-free), timezones |
+| Twilio Lookup v2 *(optional)* | Live carrier, ported status, roaming, line type |
+| NumVerify HLR *(optional)* | Carrier, line type, validity, country |
+| Browser GPS (`navigator.geolocation`) | Precise coordinates → reverse-geocoded address via OpenStreetMap |
+| Cell-tower / Wi-Fi triangulation | Coarse location from cell IDs / BSSIDs via Mozilla Location Services |
+| IP intelligence (IPQualityScore / ipapi.co) | VPN, proxy, Tor, datacenter, fraud score |
+| Risk summary | Consolidated flags: `is_voip`, `is_virtual`, `is_roaming`, `is_ported`, `is_vpn`, `country_mismatch`, … |
+
+---
 
 ## Requirements
 
-This project requires Python 3 and the `phonenumbers` library. You can install the `phonenumbers` library using pip:
+- Python 3.10+
 
 ```bash
-pip install phonenumbers
+pip install -r requirements.txt
 ```
 
-## Installation
+---
 
-To get started with the Phone Number Location Checker, clone this repository to your local machine:
+## Configuration (environment variables)
 
-```bash
-git clone https://github.com/inabakumori/phone-number-location-checker.git
-```
+All third-party API keys are **optional**. The tool works without them (graceful degradation).
 
-Navigate to the cloned directory:
+| Variable | Service | Free tier? |
+|---|---|---|
+| `TWILIO_ACCOUNT_SID` + `TWILIO_AUTH_TOKEN` | Twilio Lookup v2 — live carrier, porting, roaming | Trial credits |
+| `NUMVERIFY_API_KEY` | NumVerify HLR — carrier, line type, validity | 100 req/month |
+| `IPQS_API_KEY` | IPQualityScore — VPN/proxy/Tor/fraud score | 5 000 req/month |
 
-```bash
-cd phone-number-location-checker
-```
+Without API keys the tool still returns full `phonenumbers`-based metadata and reverse-geocoding.
+
+---
 
 ## Usage
 
-Run the script with Python 3:
+### CLI (phone number + optional IP)
 
 ```bash
 python location_checker.py
+# Enter a phone number (with country code, e.g. +14155552671):
+# Enter IP address to check (leave blank to skip):
 ```
 
-Follow the interactive prompt to enter a phone number, and the script will output the geographic location associated with it.
+Output is a JSON risk profile:
+
+```json
+{
+  "phone": { "e164": "+14155552671", "region": "California", "carrier": "AT&T", ... },
+  "hlr":  { "is_ported": false, "is_roaming": false, ... },
+  "ip":   { "is_vpn": false, "is_proxy": false, ... },
+  "risk_summary": {
+    "is_valid": true, "is_voip": false, "is_ported": false,
+    "is_vpn": false, "country_mismatch": false, ...
+  }
+}
+```
+
+### Web app
+
+```bash
+python app.py
+# Open http://localhost:5000
+```
+
+The web interface provides four panels:
+
+1. **Phone Number Analysis** — type a number, click Analyse → risk badge grid + full JSON.
+2. **Real-Time GPS** — click *Get My Location*; browser asks for permission; coordinates are reverse-geocoded server-side.
+3. **Cell-Tower / Wi-Fi Triangulation** — paste cell-tower scan JSON (from a native mobile app) to get a coarse location estimate via Mozilla Location Services.
+4. **IP / VPN / Proxy Check** — one-click check of your own IP address.
+
+### API endpoints
+
+| Method | Path | Description |
+|---|---|---|
+| `POST` | `/api/analyze` | `{ phone, ip? }` → full risk profile |
+| `POST` | `/api/locate` | `{ lat, lng }` → reverse-geocoded address |
+| `POST` | `/api/cell-locate` | `{ cellTowers?, wifiAccessPoints? }` → estimated coordinates |
+| `GET`  | `/api/ip-info` | VPN/proxy check for the caller's IP |
+
+---
+
+## Architecture
+
+```
+Browser / Client
+    │
+    ├─ GPS (navigator.geolocation) ──── POST /api/locate ──► Nominatim (OSM)
+    ├─ Cell/Wi-Fi scan (native app) ─── POST /api/cell-locate ► Mozilla LS
+    └─ IP address (HTTP header) ─────── GET  /api/ip-info ───► IPQualityScore / ipapi.co
+                                        │
+                                 POST /api/analyze
+                                        │
+                          phonenumbers lib (local)
+                                        │
+                          Twilio Lookup v2 / NumVerify (optional)
+                                        │
+                          Unified risk profile JSON
+```
+
+---
 
 ## Contributing
 
-Contributions are welcome! If you have suggestions to improve this script or add new features, please feel free to fork the repository, make your changes, and submit a pull request.
+Contributions are welcome! Fork the repository, make your changes, and open a pull request.
 
 ## License
 
-This project is open source and available under the [GNU General Public License v3.0](https://www.gnu.org/licenses/gpl-3.0.en.html).
-
-## Acknowledgments
-
-- Thanks to the `phonenumbers` library for making phone number parsing and geographic location identification possible.
+GNU General Public License v3.0 — see [LICENSE](LICENSE).
